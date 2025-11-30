@@ -1,4 +1,4 @@
-# data-science-portfolio
+💼 David Carrilho — Data Science & AI Portfolio
 
 Welcome to my Data Science & AI portfolio.
 Here I showcase projects that span Machine Learning, Deep Learning, Reinforcement Learning and Data Visualization from university work to independent projects.
