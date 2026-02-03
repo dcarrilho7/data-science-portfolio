@@ -46,7 +46,12 @@ Q-learning agent trained on a custom 2D GridWorld with traps and a goal state.
 - `--episodes 5000`
 - `--epsilon 0.1`
 - `--seed 42`
-- `--no-plot`
+- `--no-plot` (plot is skipped automatically when `--animate` is used)
+- `--animate`
+- `--animate-episodes 5`
+- `--animate-delay 0.03`
+- `--animate-hold` (keep animation window open)
+- `--backend MacOSX` (force GUI backend if window doesn’t show)
 
 ## 📌 About Me  
 I am a 3rd-year Data Science student at NOVA IMS, passionate about Machine Learning, Deep Learning, and building intelligent systems. I love experimenting, learning new techniques, and creating projects that combine data, AI, and real-world problems.

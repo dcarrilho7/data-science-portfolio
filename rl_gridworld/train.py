@@ -1,8 +1,38 @@
 from agent import QLearningAgent
 from environment import GridWorld2D
 import argparse
-import matplotlib.pyplot as plt
+import matplotlib
+from matplotlib import colors
+import numpy as np
 import random
+import sys
+
+
+def configure_matplotlib_backend():
+    backend = None
+    if "--backend" in sys.argv:
+        try:
+            idx = sys.argv.index("--backend")
+            backend = sys.argv[idx + 1]
+        except Exception:
+            backend = None
+
+    if backend:
+        try:
+            matplotlib.use(backend)
+            return
+        except Exception:
+            pass
+
+    try:
+        if sys.platform == "darwin":
+            matplotlib.use("MacOSX")
+    except Exception:
+        pass
+
+
+configure_matplotlib_backend()
+import matplotlib.pyplot as plt
 
 
 ACTIONS = ["UP", "DOWN", "LEFT", "RIGHT"]
@@ -99,10 +129,49 @@ def moving_average(x, window=50):
     return out
 
 
-def train_agent(env, agent, episodes=3000, max_steps=100):
+def build_grid_image(env, agent_pos):
+    grid = np.zeros((env.rows, env.cols), dtype=int)
+
+    for r in range(env.rows):
+        for c in range(env.cols):
+            cell = env.grid[r][c]
+            if cell == "X":
+                grid[r][c] = 1
+            elif cell == "G":
+                grid[r][c] = 2
+            elif cell == "S":
+                grid[r][c] = 3
+
+    ar, ac = agent_pos
+    grid[ar][ac] = 4
+    return grid
+
+
+def maybe_init_animation(env):
+    cmap = colors.ListedColormap(["white", "black", "lightblue", "lightgreen", "gold"])
+    norm = colors.BoundaryNorm([0, 1, 2, 3, 4, 5], cmap.N)
+
+    fig, ax = plt.subplots()
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_title("Training (live agent position)")
+
+    image = build_grid_image(env, env.start)
+    im = ax.imshow(image, cmap=cmap, norm=norm)
+
+    plt.show(block=False)
+    plt.tight_layout()
+    return fig, ax, im
+
+
+def train_agent(env, agent, episodes=3000, max_steps=100, animate=False, animate_episodes=3, animate_delay=0.05):
     rewards_per_episode = []
 
-    for _ in range(episodes):
+    if animate:
+        plt.ion()
+        fig, ax, im = maybe_init_animation(env)
+
+    for episode in range(episodes):
         state = env.reset()
         done = False
         total_reward = 0.0
@@ -118,7 +187,15 @@ def train_agent(env, agent, episodes=3000, max_steps=100):
             total_reward += reward
             steps += 1
 
+            if animate and episode < animate_episodes:
+                r, c = id_to_pos(state, cols=env.cols)
+                im.set_data(build_grid_image(env, (r, c)))
+                plt.pause(animate_delay)
+
         rewards_per_episode.append(total_reward)
+
+    if animate:
+        plt.ioff()
 
     return rewards_per_episode
 
@@ -178,6 +255,11 @@ def parse_args():
     parser.add_argument("--trials", type=int, default=200)
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--no-plot", action="store_true")
+    parser.add_argument("--animate", action="store_true")
+    parser.add_argument("--animate-episodes", type=int, default=3)
+    parser.add_argument("--animate-delay", type=float, default=0.05)
+    parser.add_argument("--animate-hold", action="store_true")
+    parser.add_argument("--backend", type=str, default=None)
     return parser.parse_args()
 
 
@@ -194,7 +276,14 @@ def main():
         epsilon=args.epsilon
     )
 
-    rewards_per_episode = train_agent(env, agent, episodes=args.episodes)
+    rewards_per_episode = train_agent(
+        env,
+        agent,
+        episodes=args.episodes,
+        animate=args.animate,
+        animate_episodes=args.animate_episodes,
+        animate_delay=args.animate_delay
+    )
     print("\nTraining complete.")
 
     goals, traps, timeouts, avg_reward = evaluate_agent(env, agent, trials=args.trials)
@@ -213,8 +302,11 @@ def main():
     print("Final reward:", final_reward)
     print_grid_with_path(env, path)
 
-    if not args.no_plot:
+    if not args.no_plot and not args.animate:
         plot_learning_curve(rewards_per_episode)
+
+    if args.animate and args.animate_hold:
+        plt.show()
 
 
 if __name__ == "__main__":
