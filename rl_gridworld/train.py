@@ -1,34 +1,19 @@
-# train.py
 from agent import QLearningAgent
 from environment import GridWorld2D
+import argparse
 import matplotlib.pyplot as plt
+import random
 
 
-states = range(25)
-actions = ["UP", "DOWN", "LEFT", "RIGHT"]
+ACTIONS = ["UP", "DOWN", "LEFT", "RIGHT"]
+STATE_COUNT = 25
 
-agent = QLearningAgent(
-    states=states,
-    actions=actions,
-    alpha=0.1,
-    gamma=0.95,
-    epsilon=0.3
-)
 
-env = GridWorld2D()
-episodes = 3000
+def set_seed(seed):
+    if seed is None:
+        return
+    random.seed(seed)
 
-for episode in range(episodes):
-    state = env.reset()
-    done = False
-
-    while not done:
-        action = agent.choose_action(state)
-        next_state, reward, done = env.step(action)
-        agent.learn(state, action, reward, next_state)
-        state = next_state
-
-print("\nTraining complete.")
 
 def run_greedy_episode(env, agent, max_steps=50):
     state = env.reset()
@@ -46,50 +31,14 @@ def run_greedy_episode(env, agent, max_steps=50):
             return total_reward, reward  # final reward tells goal(+10) or trap(-10)
     return total_reward, 0  # timed out
 
-# Evaluate
-old_eps = agent.epsilon
-agent.epsilon = 0.0  # turn off exploration for evaluation
-
-trials = 200
-goals = 0
-traps = 0
-timeouts = 0
-rewards = []
-
-for _ in range(trials):
-    total_r, final_r = run_greedy_episode(env, agent)
-    rewards.append(total_r)
-    if final_r == 10:
-        goals += 1
-    elif final_r == -10:
-        traps += 1
-    else:
-        timeouts += 1
-
-agent.epsilon = old_eps  # restore
-
-print("\nEvaluation (greedy policy):")
-print("Goal reached:", goals, "/", trials)
-print("Fell into trap:", traps, "/", trials)
-print("Timed out:", timeouts, "/", trials)
-print("Average total reward:", sum(rewards) / len(rewards))
-
 
 def action_symbol(a):
     return {"UP":"^", "DOWN":"v", "LEFT":"<", "RIGHT":">"}[a]
 
-print("\nLearned policy (best action per state):")
-for r in range(5):
-    row_syms = []
-    for c in range(5):
-        s = r * 5 + c
-        best_a = max(agent.Q[s], key=agent.Q[s].get)
-        row_syms.append(action_symbol(best_a))
-    print(" ".join(row_syms))
-
 
 def id_to_pos(state_id, cols=5):
     return (state_id // cols, state_id % cols)
+
 
 def greedy_trajectory(env, agent, max_steps=50):
     old_eps = agent.epsilon
@@ -114,12 +63,6 @@ def greedy_trajectory(env, agent, max_steps=50):
     agent.epsilon = old_eps
     return path, actions_taken, 0  # timed out
 
-path, actions_taken, final_reward = greedy_trajectory(env, agent)
-
-print("\nGreedy best trajectory:")
-print("Path:", path)
-print("Actions:", actions_taken)
-print("Final reward:", final_reward)
 
 def print_grid_with_path(env, path):
     grid = [row[:] for row in env.grid]  # copy
@@ -143,30 +86,6 @@ def print_grid_with_path(env, path):
     for row in grid:
         print(" ".join(row))
 
-print_grid_with_path(env, path)
-
-
-rewards_per_episode = []
-
-for episode in range(episodes):
-    state = env.reset()
-    done = False
-    total_reward = 0.0
-    steps = 0
-    max_steps = 100  # prevents endless wandering
-
-    while not done and steps < max_steps:
-        action = agent.choose_action(state)
-        next_state, reward, done = env.step(action)
-
-        agent.learn(state, action, reward, next_state)
-
-        state = next_state
-        total_reward += reward
-        steps += 1
-
-    rewards_per_episode.append(total_reward)
-
 
 def moving_average(x, window=50):
     if len(x) < window:
@@ -179,16 +98,124 @@ def moving_average(x, window=50):
         out.append(running_sum / window)
     return out
 
-plt.figure()
-plt.plot(rewards_per_episode, label="Reward per episode")
 
-ma_window = 50
-ma = moving_average(rewards_per_episode, window=ma_window)
-plt.plot(range(len(ma)), ma, label=f"Moving average ({ma_window})")
+def train_agent(env, agent, episodes=3000, max_steps=100):
+    rewards_per_episode = []
 
-plt.title("Learning Curve: Reward per Episode")
-plt.xlabel("Episode")
-plt.ylabel("Total reward")
-plt.legend()
-plt.show()
+    for _ in range(episodes):
+        state = env.reset()
+        done = False
+        total_reward = 0.0
+        steps = 0
 
+        while not done and steps < max_steps:
+            action = agent.choose_action(state)
+            next_state, reward, done = env.step(action)
+
+            agent.learn(state, action, reward, next_state)
+
+            state = next_state
+            total_reward += reward
+            steps += 1
+
+        rewards_per_episode.append(total_reward)
+
+    return rewards_per_episode
+
+
+def evaluate_agent(env, agent, trials=200):
+    old_eps = agent.epsilon
+    agent.epsilon = 0.0  # greedy for evaluation
+
+    goals = 0
+    traps = 0
+    timeouts = 0
+    rewards = []
+
+    for _ in range(trials):
+        total_r, final_r = run_greedy_episode(env, agent)
+        rewards.append(total_r)
+        if final_r == 10:
+            goals += 1
+        elif final_r == -10:
+            traps += 1
+        else:
+            timeouts += 1
+
+    agent.epsilon = old_eps
+    return goals, traps, timeouts, sum(rewards) / len(rewards)
+
+
+def print_policy(agent, rows=5, cols=5):
+    print("\nLearned policy (best action per state):")
+    for r in range(rows):
+        row_syms = []
+        for c in range(cols):
+            s = r * cols + c
+            best_a = max(agent.Q[s], key=agent.Q[s].get)
+            row_syms.append(action_symbol(best_a))
+        print(" ".join(row_syms))
+
+
+def plot_learning_curve(rewards_per_episode, window=50):
+    plt.figure()
+    plt.plot(rewards_per_episode, label="Reward per episode")
+    ma = moving_average(rewards_per_episode, window=window)
+    plt.plot(range(len(ma)), ma, label=f"Moving average ({window})")
+    plt.title("Learning Curve: Reward per Episode")
+    plt.xlabel("Episode")
+    plt.ylabel("Total reward")
+    plt.legend()
+    plt.show()
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Train a Q-learning agent in GridWorld.")
+    parser.add_argument("--episodes", type=int, default=3000)
+    parser.add_argument("--alpha", type=float, default=0.1)
+    parser.add_argument("--gamma", type=float, default=0.95)
+    parser.add_argument("--epsilon", type=float, default=0.3)
+    parser.add_argument("--trials", type=int, default=200)
+    parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--no-plot", action="store_true")
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+    set_seed(args.seed)
+
+    env = GridWorld2D()
+    agent = QLearningAgent(
+        states=range(STATE_COUNT),
+        actions=ACTIONS,
+        alpha=args.alpha,
+        gamma=args.gamma,
+        epsilon=args.epsilon
+    )
+
+    rewards_per_episode = train_agent(env, agent, episodes=args.episodes)
+    print("\nTraining complete.")
+
+    goals, traps, timeouts, avg_reward = evaluate_agent(env, agent, trials=args.trials)
+    print("\nEvaluation (greedy policy):")
+    print("Goal reached:", goals, "/", args.trials)
+    print("Fell into trap:", traps, "/", args.trials)
+    print("Timed out:", timeouts, "/", args.trials)
+    print("Average total reward:", avg_reward)
+
+    print_policy(agent, rows=env.rows, cols=env.cols)
+
+    path, actions_taken, final_reward = greedy_trajectory(env, agent)
+    print("\nGreedy best trajectory:")
+    print("Path:", path)
+    print("Actions:", actions_taken)
+    print("Final reward:", final_reward)
+    print_grid_with_path(env, path)
+
+    if not args.no_plot:
+        plot_learning_curve(rewards_per_episode)
+
+
+if __name__ == "__main__":
+    main()

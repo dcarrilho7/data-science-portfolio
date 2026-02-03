@@ -30,5 +30,23 @@ Reward shaping
 
 ---
 
+## Projects
+
+### `rl_gridworld`
+Q-learning agent trained on a custom 2D GridWorld with traps and a goal state.
+
+**How to run**
+- From the repo root:
+  - `python -m venv .venv`
+  - `source .venv/bin/activate`
+  - `pip install -r requirements.txt`
+  - `python rl_gridworld/train.py`
+
+**Optional flags**
+- `--episodes 5000`
+- `--epsilon 0.1`
+- `--seed 42`
+- `--no-plot`
+
 ## 📌 About Me  
 I am a 3rd-year Data Science student at NOVA IMS, passionate about Machine Learning, Deep Learning, and building intelligent systems. I love experimenting, learning new techniques, and creating projects that combine data, AI, and real-world problems.
