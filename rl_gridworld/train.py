@@ -1,9 +1,11 @@
 from agent import QLearningAgent
 from environment import GridWorld2D
 import argparse
+import csv
 import matplotlib
 from matplotlib import colors
 import numpy as np
+import os
 import random
 import sys
 
@@ -36,13 +38,13 @@ import matplotlib.pyplot as plt
 
 
 ACTIONS = ["UP", "DOWN", "LEFT", "RIGHT"]
-STATE_COUNT = 25
 
 
 def set_seed(seed):
     if seed is None:
         return
     random.seed(seed)
+    np.random.seed(seed)
 
 
 def run_greedy_episode(env, agent, max_steps=50):
@@ -164,7 +166,17 @@ def maybe_init_animation(env):
     return fig, ax, im
 
 
-def train_agent(env, agent, episodes=3000, max_steps=100, animate=False, animate_episodes=3, animate_delay=0.05):
+def train_agent(
+    env,
+    agent,
+    episodes=3000,
+    max_steps=100,
+    animate=False,
+    animate_episodes=3,
+    animate_delay=0.05,
+    epsilon_min=0.05,
+    epsilon_decay=0.999
+):
     rewards_per_episode = []
 
     if animate:
@@ -181,7 +193,7 @@ def train_agent(env, agent, episodes=3000, max_steps=100, animate=False, animate
             action = agent.choose_action(state)
             next_state, reward, done = env.step(action)
 
-            agent.learn(state, action, reward, next_state)
+            agent.learn(state, action, reward, next_state, done=done)
 
             state = next_state
             total_reward += reward
@@ -193,6 +205,7 @@ def train_agent(env, agent, episodes=3000, max_steps=100, animate=False, animate
                 plt.pause(animate_delay)
 
         rewards_per_episode.append(total_reward)
+        agent.epsilon = max(epsilon_min, agent.epsilon * epsilon_decay)
 
     if animate:
         plt.ioff()
@@ -246,15 +259,47 @@ def plot_learning_curve(rewards_per_episode, window=50):
     plt.show()
 
 
+def save_rewards_csv(rewards_per_episode, output_dir):
+    os.makedirs(output_dir, exist_ok=True)
+    out_path = os.path.join(output_dir, "rewards_per_episode.csv")
+    with open(out_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["episode", "reward"])
+        for episode, reward in enumerate(rewards_per_episode, start=1):
+            writer.writerow([episode, reward])
+    return out_path
+
+
+def save_learning_curve_plot(rewards_per_episode, output_dir, window=50):
+    os.makedirs(output_dir, exist_ok=True)
+    out_path = os.path.join(output_dir, "learning_curve.png")
+    plt.figure()
+    plt.plot(rewards_per_episode, label="Reward per episode")
+    ma = moving_average(rewards_per_episode, window=window)
+    plt.plot(range(len(ma)), ma, label=f"Moving average ({window})")
+    plt.title("Learning Curve: Reward per Episode")
+    plt.xlabel("Episode")
+    plt.ylabel("Total reward")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=150)
+    plt.close()
+    return out_path
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Train a Q-learning agent in GridWorld.")
     parser.add_argument("--episodes", type=int, default=3000)
     parser.add_argument("--alpha", type=float, default=0.1)
     parser.add_argument("--gamma", type=float, default=0.95)
     parser.add_argument("--epsilon", type=float, default=0.3)
+    parser.add_argument("--epsilon-min", type=float, default=0.05)
+    parser.add_argument("--epsilon-decay", type=float, default=0.999)
     parser.add_argument("--trials", type=int, default=200)
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--no-plot", action="store_true")
+    parser.add_argument("--no-save-artifacts", action="store_true")
+    parser.add_argument("--output-dir", type=str, default="artifacts")
     parser.add_argument("--animate", action="store_true")
     parser.add_argument("--animate-episodes", type=int, default=3)
     parser.add_argument("--animate-delay", type=float, default=0.05)
@@ -268,8 +313,9 @@ def main():
     set_seed(args.seed)
 
     env = GridWorld2D()
+    state_count = env.rows * env.cols
     agent = QLearningAgent(
-        states=range(STATE_COUNT),
+        states=range(state_count),
         actions=ACTIONS,
         alpha=args.alpha,
         gamma=args.gamma,
@@ -282,9 +328,12 @@ def main():
         episodes=args.episodes,
         animate=args.animate,
         animate_episodes=args.animate_episodes,
-        animate_delay=args.animate_delay
+        animate_delay=args.animate_delay,
+        epsilon_min=args.epsilon_min,
+        epsilon_decay=args.epsilon_decay
     )
     print("\nTraining complete.")
+    print("Final epsilon:", round(agent.epsilon, 6))
 
     goals, traps, timeouts, avg_reward = evaluate_agent(env, agent, trials=args.trials)
     print("\nEvaluation (greedy policy):")
@@ -301,6 +350,13 @@ def main():
     print("Actions:", actions_taken)
     print("Final reward:", final_reward)
     print_grid_with_path(env, path)
+
+    if not args.no_save_artifacts:
+        csv_path = save_rewards_csv(rewards_per_episode, args.output_dir)
+        png_path = save_learning_curve_plot(rewards_per_episode, args.output_dir)
+        print("\nSaved artifacts:")
+        print("CSV:", csv_path)
+        print("Plot:", png_path)
 
     if not args.no_plot and not args.animate:
         plot_learning_curve(rewards_per_episode)

@@ -45,8 +45,12 @@ Q-learning agent trained on a custom 2D GridWorld with traps and a goal state.
 **Optional flags**
 - `--episodes 5000`
 - `--epsilon 0.1`
+- `--epsilon-min 0.05`
+- `--epsilon-decay 0.999`
 - `--seed 42`
 - `--no-plot` (plot is skipped automatically when `--animate` is used)
+- `--output-dir artifacts` (saves `rewards_per_episode.csv` and `learning_curve.png`)
+- `--no-save-artifacts`
 - `--animate`
 - `--animate-episodes 5`
 - `--animate-delay 0.03`
